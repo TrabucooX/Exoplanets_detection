@@ -24,7 +24,7 @@ def preprocess_pipeline(initial_range, final_range):
     
 
     kic_cache = 0
-    lc_collection = lk.LightCurveCollection([])
+    lc_collection = {"lcs":lk.LightCurveCollection([]), "lc_periods":[], "lc_epoch_transits":[]}
     flux_dictionary = {"label":[], "flux":[]}
 
     for i in tqdm(range(initial_range, final_range), colour='yellow', desc='Downloading batch of Lightcurves'):
@@ -41,6 +41,11 @@ def preprocess_pipeline(initial_range, final_range):
             except Exception as e:
                 print(f"Error with KIC {kic_lc}: {e}")
                 continue
+
+        # Saving lightcurve after the if, so if the same kic is recorded, we added the same star observation but with another object.
+        lc_collection["lcs"].append(lc)
+        lc_collection["lc_periods"].append(period_lc)
+        lc_collection["lc_epoch_transits"].append(epoch_transit_lc)
 
         # Computing parameters for the processing of the curve
         win = int(10 * (period_lc**0.3))
@@ -80,10 +85,12 @@ def preprocess_pipeline(initial_range, final_range):
 
 def saving_raw_flux_data(lc_collection : lk.LightCurveCollection, batch_number=1):
     data = []
-    for lc in lc_collection:
+    for i, lc in enumerate(lc_collection["lcs"]):
         data.append({
-            'kic_id': lc.label,
-            'flux': lc.flux.value.tolist()
+        'kic_id': lc.label,
+        'period': lc_collection["lc_periods"][i],
+        'epoch_transit': lc_collection["lc_epoch_transits"][i],
+        'flux': lc.flux.value.tolist()
         })
 
     df = pd.DataFrame(data)
