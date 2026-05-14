@@ -14,10 +14,11 @@ ZOOM_RANGE = 0.2
 BIN_SIZE = 0.02 # Value according to formula to get a valid representation of the binned curve.
 
 
-def preprocess_pipeline(initial_range, final_range):
+def preprocess_pipeline(initial_range, final_range, test_set=False):
     exoplanets = pd.read_csv("Confirmed_exoplanets_NASA_archive.csv", comment="#")
     exoplanets_labeled = exoplanets[exoplanets["koi_disposition"]!="CANDIDATE"].reset_index(drop=True)
 
+    
     if final_range > len(exoplanets_labeled):
         raise ValueError(f"final_range ({final_range}) exceeds the available samples in the dataset ({len(exoplanets_labeled)}). "
         "Please provide a smaller range.")
@@ -42,11 +43,6 @@ def preprocess_pipeline(initial_range, final_range):
                 print(f"Error with KIC {kic_lc}: {e}")
                 continue
 
-        # Saving lightcurve after the if, so if the same kic is recorded, we added the same star observation but with another object.
-        lc_collection["lcs"].append(lc)
-        lc_collection["lc_periods"].append(period_lc)
-        lc_collection["lc_epoch_transits"].append(epoch_transit_lc)
-
         # Computing parameters for the processing of the curve
         win = int(10 * (period_lc**0.3))
         if win % 2 == 0: win += 1
@@ -58,6 +54,11 @@ def preprocess_pipeline(initial_range, final_range):
         x_grid = np.linspace(-ZOOM_RANGE, ZOOM_RANGE, NUM_INTERPOLATION)
         # Interpolate the flux onto that grid
         if len(folded_lc) > MINIMUM_FOLDED_POINTS:
+            # Saving lightcurve after the if, so if the same kic is recorded, we added the same star observation but with another object.
+            lc_collection["lcs"].append(lc)
+            lc_collection["lc_periods"].append(period_lc)
+            lc_collection["lc_epoch_transits"].append(epoch_transit_lc)
+
             binned_lc = folded_lc.bin(BIN_SIZE)
             fixed_flux = np.interp(x_grid, binned_lc.time.value, binned_lc.flux.value)
             flux_dictionary['label'].append(int(label_lc == "CONFIRMED"))
@@ -110,7 +111,6 @@ def saving_processed_flux_data(flux_dictionary : dict, batch_number = 1):
     df_new["skew"] = df_subset.skew(axis=1).fillna(1.0)
     df_new["kurtosis"]  = df_subset.kurt(axis=1).fillna(1.0)
     df_new["mins"] = df_subset.min(axis=1)
-    df_new.dropna(axis=0, inplace=True)
 
     try:
         df_new.to_parquet(f"data/interpolated_batches/exoplanets_interpolated_flux_data_batch_{batch_number}.parquet",
