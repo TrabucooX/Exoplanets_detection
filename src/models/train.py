@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from registry import MODELS
-from evaluate import compute_metrics, plot_confusion_matrix_rocauc
+from evaluate import compute_metrics, plot_metrics
 import mlflow
 from sklearn.model_selection import train_test_split
 import argparse
@@ -11,29 +11,35 @@ warnings.filterwarnings('ignore')
 
 def train(model, model_version):
     mlflow.set_tracking_uri("http://localhost:5000")
-    mlflow.set_experiment("Models training")
+    mlflow.set_experiment("Exoplanet Detection Pipeline")
 
-    df = pd.read_parquet("data/exoplanets_interpolated_flux_data_batch_1.parquet")
-    X_train, X_test, y_train, y_test = train_test_split(df.drop("label", axis=1), df["label"], random_state=73)
+    df = pd.read_parquet("data/exoplanets_flux_data.parquet")
+    X = df.drop(["label", "transit_depth", "mins"], axis=1)
+    y = df["label"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=73)
     
-    dataset = mlflow.data.from_pandas(df, name="Batch 1", targets="label")
+    dataset = mlflow.data.from_pandas(df, name="Full Dataset (2857 samples)", targets="label")
 
 
-    with mlflow.start_run(run_name="Model alpha"):
+    with mlflow.start_run(run_name=f"{model}_{model_version}"):
         mlflow.log_input(dataset, context="training")
 
         model = MODELS[model]
         model_name = type(model).__name__
         model.fit(X_train, y_train)
-        model_info = mlflow.sklearn.log_model(sk_model=model, name=f"{model_name}_{model_version}")
         
         predictions = model.predict(X_test)
         prob_predictions = model.predict_proba(X_test)[:, 1]
+
+        threshold = 0.65
+        custom_preds = (prob_predictions > threshold).astype(int)
         
         metrics = compute_metrics(y_test, predictions)
-        plot_confusion_matrix_rocauc(y_test, predictions, prob_predictions, model_name=model_name)
         mlflow.log_metrics(metrics)
 
+        plot_metrics(y_test, predictions, prob_predictions, model_name=model_name)
+        
+        mlflow.sklearn.log_model(sk_model=model, name=f"{model_name}_{model_version}")
         mlflow.set_tag("Training experiment", f"Basic {model_name} model for batch 1")
         
 
@@ -42,7 +48,7 @@ def train(model, model_version):
 
         
 if __name__ == "__main__":
-    print("Model trained and successfully tracked by mlflow.\nHere are the results:")
+    print("Initializing model training...")
     parser = argparse.ArgumentParser()
 
     parser.add_argument("model", type=str, help="Model name")
@@ -56,5 +62,6 @@ if __name__ == "__main__":
         exit
 
     train(args.model, args.model_version)
+    print("Run completed. Check MLflow UI for results.")
     
 
