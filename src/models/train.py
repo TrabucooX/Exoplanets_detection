@@ -6,6 +6,7 @@ import mlflow
 import optuna
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
+from sklearn.ensemble import RandomForestClassifier, StackingClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 import argparse
@@ -13,11 +14,10 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-def objective(trial, X_train, y_train, X_test, y_test):
+def objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset):
     """Optuna objective function for multi-model tuning."""
-    classifier_name = trial.suggest_categorical("classifier", ["xgboost", "lightgbm"])
 
-    if classifier_name == "xgboost":
+    if model_to_tune == "xgb":
         params = {
             'n_estimators': trial.suggest_int('n_estimators', 100, 500),
             'max_depth': trial.suggest_int('max_depth', 3, 7),
@@ -28,7 +28,7 @@ def objective(trial, X_train, y_train, X_test, y_test):
             'eval_metric': 'logloss'
         }
         model = XGBClassifier(**params, random_state=73)
-    else:
+    elif model_to_tune == 'lgbm':
         params = {
             'n_estimators': trial.suggest_int('n_estimators', 100, 500),
             'max_depth': trial.suggest_int('max_depth', 3, 7),
@@ -40,17 +40,47 @@ def objective(trial, X_train, y_train, X_test, y_test):
         }
         model = LGBMClassifier(**params, verbose=-1, random_state=73)
 
+    elif model_to_tune == "rf":
+        params = {
+            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+            'max_depth': trial.suggest_int('max_depth', 3, 15),
+            'min_samples_split': trial.suggest_int('min_samples_split', 2, 10),
+            'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 10),
+            'class_weight': trial.suggest_categorical('class_weight', ['balanced', 'balanced_subsample', None])
+        }
+        model = RandomForestClassifier(**params, random_state=73)
+    
     with mlflow.start_run(nested=True):
         model.fit(X_train, y_train)
-        # We optimize for Macro F1 to ensure both Noise and Planet recall are balanced
-        preds = model.predict(X_test)
-        score = f1_score(y_test, preds, average='macro')
+       
+        predictions = model.predict(X_test)
+        score = f1_score(y_test, predictions, average='macro')
         
         mlflow.log_params(params)
-        mlflow.log_metric("macro_f1", score)
+        mlflow.log_metric("macro_f1", score, dataset=dataset)
         return score
+    
+def get_production_ensemble(model_version):
+    """
+    Dynamically loads the chosen registered models from MLflow
+    that are to be used inside a StackingClassifier as base estimators.
+    """
+    print("Loading base estimators models from MLflow Models...")
+    
+    rf_tuned = mlflow.sklearn.load_model(f"runs:/9618f06e9a2041dc8110610c843b1531/Exoplanet_RandomForest_{model_version}")
+    xgb_tuned = mlflow.sklearn.load_model(f"runs:/17153db854954dd6bc5fa37de50c4295/Exoplanet_XGBoost_{model_version}")
+    lgbm_tuned = mlflow.sklearn.load_model(f"runs:/54438a0c1eb74717af7f17fb684f5b0a/Exoplanet_LightGBM_{model_version}")
+    
+    base_estimators = [
+        ('rf', rf_tuned),
+        ('xgb', xgb_tuned),
+        ('lgbm', lgbm_tuned)
+    ]
 
-def train(model, model_version, tune=False):
+    return StackingClassifier(estimators=base_estimators, cv=3)
+
+
+def train(mode, model_version, model_to_tune=None):
     mlflow.set_tracking_uri("http://localhost:5000")
     mlflow.set_experiment("Exoplanet Detection Pipeline")
 
@@ -59,42 +89,57 @@ def train(model, model_version, tune=False):
     y = df["label"]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=73)
     
-    dataset = mlflow.data.from_pandas(df, name="Full Dataset (2857 samples)", targets="label")
+    dataset = mlflow.data.from_pandas(df, name="Full Dataset", targets="label")
 
-    with mlflow.start_run(run_name=f"{model}_{model_version}"):
-        mlflow.log_input(dataset, context="training")
+    with mlflow.start_run(run_name=f"Training_{mode}_{model_version}"):
+        mlflow.log_input(dataset, context=mode)
+        mlflow.set_tag("pipeline_mode", mode)
 
-        if tune:
-            print(f"Starting Hyperparameter Tuning for {model}...")
+        if mode == "tune":
+            print(f"Starting Optuna Hyperparameter Tuning for {model_to_tune}...")
             study = optuna.create_study(direction='maximize')
-            study.optimize(lambda trial: objective(trial, X_train, y_train, X_test, y_test), n_trials=25)
+            study.optimize(lambda trial: objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset), n_trials=15)
             
-            mlflow.log_params(study.best_params)
-            mlflow.log_metric("macro_f1", study.best_value)
-            print(f"Best Trial Score: {study.best_value}")
-            # Use the best parameters to train the final model
             best_params = study.best_params
-            best_clf_name = best_params.pop('classifier')
-            final_model = XGBClassifier(**best_params) if best_clf_name == 'xgboost' else LGBMClassifier(**best_params)
-        else:
-            final_model = MODELS[model]
-        
-        model_name = type(final_model).__name__
+            mlflow.log_params(best_params)
+       
+            if model_to_tune == "xgb":
+                final_model = XGBClassifier(**best_params, random_state=73)
+                registry_name = f"Exoplanet_XGBoost_{model_version}"
+            elif model_to_tune == "lgbm":
+                final_model = LGBMClassifier(**best_params, verbose=-1, random_state=73)
+                registry_name = f"Exoplanet_LightGBM_{model_version}"
+            elif model_to_tune == "rf":
+                final_model = RandomForestClassifier(**best_params, random_state=73)
+                registry_name = f"Exoplanet_RandomForest_{model_version}"
+
+            mlflow.log_metric("macro_f1", study.best_value, dataset=dataset)
+            print(f"Best Trial Score: {study.best_value}")
+
+        elif mode == 'ensemble':
+            print("Training Final Production Stacking Ensemble...")
+            final_model = get_production_ensemble(model_version)
+            registry_name = f"StackingClassifier_{model_version}"
+
+            mlflow.log_param(final_model.get_params(deep=True))
+
         final_model.fit(X_train, y_train)
-        
         predictions = final_model.predict(X_test)
+
+        score = f1_score(y_test, predictions, average='macro')
+
         prob_predictions = final_model.predict_proba(X_test)[:, 1]
 
-        threshold = 0.65
+        threshold = 0.6
         custom_preds = (prob_predictions > threshold).astype(int)
         
-        metrics = compute_metrics(y_test, custom_preds)
-        mlflow.log_metrics(metrics)
-
-        plot_metrics(y_test, custom_preds, prob_predictions, model_name=model_name)
+        metrics = compute_metrics(y_test, predictions)
+        plot_metrics(y_test, predictions, prob_predictions, model_name=registry_name)
         
-        mlflow.sklearn.log_model(sk_model=final_model, name=f"{model_name}_{model_version}")
-        mlflow.set_tag("Training experiment", f"Basic {model_name} model for batch 1")
+        model_info = mlflow.sklearn.log_model(sk_model=final_model, name=registry_name)
+        mlflow.log_metric("macro_f1", score, dataset=dataset, model_id=model_info.model_id)
+        mlflow.log_metrics(metrics, dataset=dataset, model_id=model_info.model_id)
+        
         
 
 
@@ -103,19 +148,21 @@ def train(model, model_version, tune=False):
         
 if __name__ == "__main__":
     print("Initializing model training...")
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Unified Exoplanet Training & Tuning Pipeline")
 
-    parser.add_argument("model", type=str, help="Model name")
-    parser.add_argument("model_version", type=str, help="Model version")
-    parser.add_argument("--tune", action="store_true", help="Enable Optuna tuning")
+    parser.add_argument("--mode", type=str, required=True, choices=["tune", "ensemble"])
+    parser.add_argument("--version", type=str, required=True)
+    parser.add_argument("--model", type=str, choices=["xgb", "lgbm", "rf"], 
+                        help="Required if --mode is 'tune'. Which model to optimize.")
+    
+    args = parser.parse_args()
+    
+    if args.mode == "tune" and not args.model:
+        parser.error("--model is required when --mode is set to 'tune'!")
 
     args = parser.parse_args()
 
-    if args.model not in MODELS.keys():
-        print(f"Error: {args.model} is not a valid model. Choose from: {list(MODELS.keys())}")
-        exit
-
-    train(args.model, args.model_version, tune=args.tune)
+    train(args.mode, args.version, args.model)
     print("Run completed. Check MLflow UI for results.")
     
 
