@@ -69,6 +69,8 @@ def preprocess_pipeline(initial_range, final_range, test_set=False):
 
     return lc_collection, flux_dictionary
         
+        # Illustration only.
+        #
         # if i%25 == 0 and len(folded_lc)>50:
         #     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -91,7 +93,8 @@ def saving_raw_flux_data(lc_collection : lk.LightCurveCollection, batch_number=1
         'kic_id': lc.label,
         'period': lc_collection["lc_periods"][i],
         'epoch_transit': lc_collection["lc_epoch_transits"][i],
-        'flux': lc.flux.value.tolist()
+        'flux': lc.flux.value.tolist(),
+        'timestamps': lc.time.value.tolist()
         })
 
     df = pd.DataFrame(data)
@@ -106,14 +109,18 @@ def saving_processed_flux_data(flux_dictionary : dict, batch_number = 1):
     df_new.columns = [f'flux_{i}' for i in range(NUM_INTERPOLATION)]
     df_new['label'] = flux_dictionary['label']
 
-    # Computing skewness, kurtosis and minimum of our interpolated-flux points.
+    # Performing feature engineering with our interpolated-flux points.
     df_subset = df_new.iloc[:, :NUM_INTERPOLATION-1]
     df_new["skew"] = df_subset.skew(axis=1).fillna(1.0)
     df_new["kurtosis"]  = df_subset.kurt(axis=1).fillna(1.0)
     df_new["mins"] = df_subset.min(axis=1)
+    df_new["std"] = df_subset.std(axis=1)
+    df_new["transit_depth"] = 1-df_new['mins']
+    df_new['noise_to_signal'] = np.round(df_new['std']/df_new["transit_depth"], 6)
+    df_new['kurtosis_to_depth'] = np.round(df_new['kurtosis']/df_new["transit_depth"], 6)
 
     try:
-        df_new.to_parquet(f"data/interpolated_batches/exoplanets_interpolated_flux_data_batch_{batch_number}.parquet",
+        df_new.to_parquet(f"data/exoplanets_flux_data_batch_{batch_number}.parquet",
                           engine='pyarrow', compression='snappy', index=False)
         print('Interpolated flux values have been stored correctly.')
     except Exception as e:
