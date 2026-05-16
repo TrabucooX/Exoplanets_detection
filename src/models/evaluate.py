@@ -3,11 +3,17 @@ from sklearn.metrics import classification_report, f1_score, accuracy_score, rec
 import matplotlib.pyplot as plt
 import mlflow
 
-def compute_metrics(y, predictions):
-    return {"accuracy": accuracy_score(y, predictions),
+def compute_metrics(y, predictions, custom_threshold=False):
+    if not custom_threshold:
+        return {"accuracy": accuracy_score(y, predictions),
             "recall": recall_score(y, predictions),
             "precision": precision_score(y, predictions),
             "f1_score": f1_score(y, predictions)}
+    else:
+        return {"accuracy_threshold": accuracy_score(y, predictions),
+            "recall_threshold": recall_score(y, predictions),
+            "precision_threshold": precision_score(y, predictions),
+            "f1_score_threshold": f1_score(y, predictions)}
 
 def plot_classification_curve(display_class, y_true, y_scores, model_name, title, xlabel, ylabel, save_path,
                               curve_name="Exoplanet", color="#2c3e50", legend_loc="lower right",
