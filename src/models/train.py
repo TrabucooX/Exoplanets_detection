@@ -22,7 +22,7 @@ def objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset):
             'n_estimators': trial.suggest_int('n_estimators', 100, 500),
             'max_depth': trial.suggest_int('max_depth', 3, 7),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.1),
-            'scale_pos_weight': trial.suggest_float('scale_pos_weight', 0.35, 0.45),
+            'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 1.2),
             'subsample': trial.suggest_float('subsample', 0.7, 1.0),
             'use_label_encoder': False,
             'eval_metric': 'logloss'
@@ -34,7 +34,7 @@ def objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset):
             'max_depth': trial.suggest_int('max_depth', 3, 7),
             'num_leaves': trial.suggest_int('num_leaves', 20, 100),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.1),
-            'scale_pos_weight': trial.suggest_float('scale_pos_weight', 0.35, 0.45),
+            'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 1.2),
             'feature_fraction': trial.suggest_float('feature_fraction', 0.7, 1.0),
             'reg_alpha': trial.suggest_float('reg_alpha', 0, 0.5)
         }
@@ -67,9 +67,9 @@ def get_production_ensemble(model_version):
     """
     print("Loading base estimators models from MLflow Models...")
     
-    rf_tuned = mlflow.sklearn.load_model(f"runs:/9618f06e9a2041dc8110610c843b1531/Exoplanet_RandomForest_{model_version}")
-    xgb_tuned = mlflow.sklearn.load_model(f"runs:/17153db854954dd6bc5fa37de50c4295/Exoplanet_XGBoost_{model_version}")
-    lgbm_tuned = mlflow.sklearn.load_model(f"runs:/54438a0c1eb74717af7f17fb684f5b0a/Exoplanet_LightGBM_{model_version}")
+    rf_tuned = mlflow.sklearn.load_model(f"runs:/39ba954e4c02466fa7624b250c55ce6e/Exoplanet_RandomForest_{model_version}")
+    xgb_tuned = mlflow.sklearn.load_model(f"runs:/eed8ad9c294a4907908aa20c71c57e69/Exoplanet_XGBoost_{model_version}")
+    lgbm_tuned = mlflow.sklearn.load_model(f"runs:/5745c994f3d44d9291bbad87632e32bc/Exoplanet_LightGBM_{model_version}")
     
     base_estimators = [
         ('rf', rf_tuned),
@@ -113,7 +113,6 @@ def train(mode, model_version, model_to_tune=None):
                 final_model = RandomForestClassifier(**best_params, random_state=73)
                 registry_name = f"Exoplanet_RandomForest_{model_version}"
 
-            mlflow.log_metric("macro_f1", study.best_value, dataset=dataset)
             print(f"Best Trial Score: {study.best_value}")
 
         elif mode == 'ensemble':
@@ -121,7 +120,7 @@ def train(mode, model_version, model_to_tune=None):
             final_model = get_production_ensemble(model_version)
             registry_name = f"StackingClassifier_{model_version}"
 
-            mlflow.log_param(final_model.get_params(deep=True))
+            mlflow.log_params(final_model.get_params())
 
         final_model.fit(X_train, y_train)
         predictions = final_model.predict(X_test)
