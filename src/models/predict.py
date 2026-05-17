@@ -15,7 +15,7 @@ def predict(data_path, run_id, model_name, threshold=0.6):
         raise FileNotFoundError(f"Data has not been found at {data_path}")
     
     unlabeled_exoplanets = pd.read_parquet(data_path)
-    X_unlabeled = unlabeled_exoplanets.drop(["kic_id", "label", "transit_depth", "mins"], axis=1)
+    X_unlabeled = unlabeled_exoplanets.drop(["kic_id", "transit_depth", "mins"], axis=1)
 
     dataset_metadata = mlflow.data.from_pandas(unlabeled_exoplanets, name=os.path.basename(data_path))
 
