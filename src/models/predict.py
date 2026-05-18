@@ -62,7 +62,7 @@ if __name__ == "__main__":
     parser.add_argument("--data", type=str, required=True, help="Path to the unlabeled Parquet data")
     parser.add_argument("--run_id", type=str, required=True, help="The MLflow Run ID containing the ensemble artifact")
     parser.add_argument("--model_name", type=str, required=True, help="The name of the desired model in MLflow")
-    parser.add_argument("--threshold", type=float, default=0.65, help="Decision threshold boundary")
+    parser.add_argument("--threshold", type=float, default=0.6, help="Decision threshold boundary")
     
     args = parser.parse_args()
     predict(data_path=args.data, run_id=args.run_id, model_name=args.model_name, threshold=args.threshold)

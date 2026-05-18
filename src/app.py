@@ -4,12 +4,14 @@ from fastapi import FastAPI, Request, HTTPException
 import pandas as pd
 import numpy as np
 from contextlib import asynccontextmanager
+import os
 
 
 async def lifespan(app: FastAPI):
     # Start logic
     try:
-        mlflow.set_tracking_uri("http://localhost:5000")
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+        mlflow.set_tracking_uri(tracking_uri)
         model_uri = "runs:/39ba954e4c02466fa7624b250c55ce6e/Exoplanet_RandomForest_1"
         
         app.state.model = mlflow.sklearn.load_model(model_uri=model_uri)

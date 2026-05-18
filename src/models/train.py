@@ -20,7 +20,7 @@ def objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset):
     if model_to_tune == "xgb":
         params = {
             'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 3, 7),
+            'max_depth': trial.suggest_int('max_depth', 4, 9),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.1),
             'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 1.2),
             'subsample': trial.suggest_float('subsample', 0.7, 1.0),
@@ -31,7 +31,7 @@ def objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset):
     elif model_to_tune == 'lgbm':
         params = {
             'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 3, 7),
+            'max_depth': trial.suggest_int('max_depth', 4, 9),
             'num_leaves': trial.suggest_int('num_leaves', 20, 100),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.1),
             'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 1.2),

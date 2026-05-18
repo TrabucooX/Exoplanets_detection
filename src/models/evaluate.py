@@ -2,6 +2,7 @@ from sklearn.metrics import classification_report, f1_score, accuracy_score, rec
     ConfusionMatrixDisplay, RocCurveDisplay, PrecisionRecallDisplay
 import matplotlib.pyplot as plt
 import mlflow
+import os
 
 def compute_metrics(y, predictions, custom_threshold=False):
     if not custom_threshold:
@@ -21,6 +22,8 @@ def plot_classification_curve(display_class, y_true, y_scores, model_name, title
     """
     Generic plotting function for ROC and Precision-Recall curves.
     """
+    # Ensuring visuals folder exists, else it is created.
+    os.makedirs("visuals", exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
 
