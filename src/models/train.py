@@ -67,9 +67,9 @@ def get_production_ensemble(model_version):
     """
     print("Loading base estimators models from MLflow Models...")
     
-    rf_tuned = mlflow.sklearn.load_model(f"runs:/39ba954e4c02466fa7624b250c55ce6e/Exoplanet_RandomForest_{model_version}")
-    xgb_tuned = mlflow.sklearn.load_model(f"runs:/eed8ad9c294a4907908aa20c71c57e69/Exoplanet_XGBoost_{model_version}")
-    lgbm_tuned = mlflow.sklearn.load_model(f"runs:/5745c994f3d44d9291bbad87632e32bc/Exoplanet_LightGBM_{model_version}")
+    rf_tuned = mlflow.sklearn.load_model(f"runs:/2f9f9ccc025e410fa29a848fc0cac406/Exoplanet_RandomForest_{model_version}")
+    xgb_tuned = mlflow.sklearn.load_model(f"runs:/37116ea5a09f45cf9a6b18bd2b5f03ac/Exoplanet_XGBoost_{model_version}")
+    lgbm_tuned = mlflow.sklearn.load_model(f"runs:/aee16319ad7742fcb6d7b093d8a0229e/Exoplanet_LightGBM_{model_version}")
     
     base_estimators = [
         ('rf', rf_tuned),
@@ -98,7 +98,7 @@ def train(mode, model_version, model_to_tune=None):
         if mode == "tune":
             print(f"Starting Optuna Hyperparameter Tuning for {model_to_tune}...")
             study = optuna.create_study(direction='maximize')
-            study.optimize(lambda trial: objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset), n_trials=15)
+            study.optimize(lambda trial: objective(trial, X_train, y_train, X_test, y_test, model_to_tune, dataset), n_trials=20)
             
             best_params = study.best_params
             mlflow.log_params(best_params)
@@ -130,7 +130,7 @@ def train(mode, model_version, model_to_tune=None):
         prob_predictions = final_model.predict_proba(X_test)[:, 1]
 
         threshold = 0.6
-        custom_preds = (prob_predictions > threshold).astype(int)
+        custom_predictions = (prob_predictions > threshold).astype(int)
         
         metrics = compute_metrics(y_test, predictions)
         plot_metrics(y_test, predictions, prob_predictions, model_name=registry_name)
