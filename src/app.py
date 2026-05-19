@@ -1,27 +1,30 @@
-import mlflow
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, Request, HTTPException
 import pandas as pd
 import numpy as np
 from contextlib import asynccontextmanager
 import os
+import joblib
+
+MODEL_PATH = os.getenv("MODEL_PATH", "models/production/ensemble_model.pkl")
 
 
 async def lifespan(app: FastAPI):
     # Start logic
-    try:
-        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-        mlflow.set_tracking_uri(tracking_uri)
-        model_uri = "runs:/39ba954e4c02466fa7624b250c55ce6e/Exoplanet_RandomForest_1"
-        
-        app.state.model = mlflow.sklearn.load_model(model_uri=model_uri)
+    try:        
+        global MODEL_PATH
+        if not os.path.exists(MODEL_PATH):
+            print(f"Warning: Model not found at {MODEL_PATH}. Please check your path.")
+            MODEL_PATH="models/production/ensemble_model.pkl"
+        print(f"Loading model from {MODEL_PATH}...")
+        app.state.model = joblib.load(MODEL_PATH)
         app.state.threshold = 0.65
         print("Production model loaded into the memory. Ready to perform inference.")
     except Exception as e:
         print(f"Error on startup loading assets: {str(e)}")
 
         app.state.model = None
-        app.state.threshold = 0.65
+        app.state.threshold = 0.5
     
     yield
     #Shutdown logic; preserving RAM

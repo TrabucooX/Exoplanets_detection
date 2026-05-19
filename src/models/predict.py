@@ -3,9 +3,10 @@ import numpy as np
 import mlflow
 import argparse
 import os
+import joblib
 
 
-def predict(data_path, run_id, model_name, threshold=0.6):
+def predict(data_path, model_name, model_path="models/production/ensemble_model.pkl", threshold=0.5):
     
     mlflow.set_tracking_uri("http://localhost:5000")
     mlflow.set_experiment("Exoplanet Inference Production")
@@ -24,11 +25,12 @@ def predict(data_path, run_id, model_name, threshold=0.6):
         # Log dataset lineage
         mlflow.log_input(dataset_metadata, context="inference")
 
-        model_uri = f"runs:/{run_id}/{model_name}"
-        print(f"Fetching production ensemble from MLflow run: {run_id}...")
-        model = mlflow.sklearn.load_model(model_uri)
+        print(f"Fetching production ensemble from: {model_path}...")
+        if not os.path.exists(model_path):
+            print(f"Warning: Model not found at {model_path}. Please check your path.")
+        model = joblib.load(model_path)
 
-        mlflow.set_tag("deployed_model_run_id", run_id)
+        mlflow.set_tag("deployed_model", model_name)
         mlflow.log_param("applied_threshold", threshold)
         mlflow.sklearn.log_model(sk_model=model, name=model_name)
 
@@ -60,11 +62,11 @@ def predict(data_path, run_id, model_name, threshold=0.6):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Production Exoplanet Vetting Pipeline - Inference")
     parser.add_argument("--data", type=str, required=True, help="Path to the unlabeled Parquet data")
-    parser.add_argument("--run_id", type=str, required=True, help="The MLflow Run ID containing the ensemble artifact")
+    parser.add_argument("--model_path", type=str, default="models/production/ensemble_model.pkl", help="The path containing the production or desired model")
     parser.add_argument("--model_name", type=str, required=True, help="The name of the desired model in MLflow")
-    parser.add_argument("--threshold", type=float, default=0.6, help="Decision threshold boundary")
+    parser.add_argument("--threshold", type=float, default=0.5, help="Decision threshold boundary")
     
     args = parser.parse_args()
-    predict(data_path=args.data, run_id=args.run_id, model_name=args.model_name, threshold=args.threshold)
+    predict(data_path=args.data, model_path=args.model_path, model_name=args.model_name, threshold=args.threshold)
 
 
