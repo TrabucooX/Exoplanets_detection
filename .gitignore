@@ -26,8 +26,11 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Temporally not commiting images
-*.png
+# Not commiting certain images
+*LGBM*.png
+*Ligh*.png
+*Random*.png
+*XG*.png
 
 # PyInstaller
 #   Usually these files are written by a python script from a template
